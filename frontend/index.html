@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Умная диспетчеризация ОТО
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+
+<body>
+
+<div class="app">
+
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
+    <header class="topbar">
+
+        <div class="brand">
+
+            <div class="brand-mark">
+                ОТО
+            </div>
+
+            <div>
+
+                <div class="brand-title">
+                    Умная диспетчеризация
+                </div>
+
+                <div class="brand-subtitle">
+                    Аэропорт «Внуково»
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="header-actions">
+
+            <div class="connection-status">
+                <span id="connectionDot"></span>
+                <span id="connectionText">
+                    Подключение...
+                </span>
+            </div>
+
+            <div class="role-switch">
+
+                <button
+                    class="role-btn active"
+                    data-role="dispatcher"
+                >
+                    Диспетчер
+                </button>
+
+                <button
+                    class="role-btn"
+                    data-role="observer"
+                >
+                    Наблюдатель
+                </button>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <!-- =====================================================
+         MAIN
+    ====================================================== -->
+
+    <main class="main">
+
+
+        <!-- =================================================
+             SIDEBAR
+        ================================================== -->
+
+        <aside class="sidebar">
+
+
+            <section class="panel dashboard-panel">
+
+                <div class="section-title-row">
+
+                    <div>
+                        <div class="section-title">
+                            Оперативная панель
+                        </div>
+
+                        <div class="section-subtitle">
+                            Диспетчерская смена
+                        </div>
+                    </div>
+
+                    <span class="live-pill">
+                        LIVE
+                    </span>
+
+                </div>
+
+
+                <button
+                    id="newRequestButton"
+                    class="create-btn"
+                >
+                    <span class="create-icon">+</span>
+                    Создать заявку
+                </button>
+
+
+                <div class="stats-grid">
+
+                    <div class="stat-card">
+                        <span class="stat-value" id="statTech">
+                            3
+                        </span>
+
+                        <span class="stat-label">
+                            Техники
+                        </span>
+                    </div>
+
+
+                    <div class="stat-card">
+                        <span class="stat-value" id="statFree">
+                            3
+                        </span>
+
+                        <span class="stat-label">
+                            Свободны
+                        </span>
+                    </div>
+
+
+                    <div class="stat-card">
+                        <span class="stat-value" id="statActive">
+                            0
+                        </span>
+
+                        <span class="stat-label">
+                            Заявки
+                        </span>
+                    </div>
+
+
+                    <div class="stat-card">
+                        <span class="stat-value" id="statResolved">
+                            0
+                        </span>
+
+                        <span class="stat-label">
+                            Устранено
+                        </span>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 TECHNICIANS
+            ================================================== -->
+
+            <section class="panel">
+
+                <div class="section-title">
+                    Авиатехники
+                </div>
+
+                <div
+                    id="techniciansList"
+                    class="technicians-list"
+                >
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 NOTIFICATIONS
+            ================================================== -->
+
+            <section class="panel">
+
+                <div class="section-title-row">
+
+                    <div class="section-title">
+                        Журнал событий
+                    </div>
+
+                    <span
+                        class="event-count"
+                        id="eventCount"
+                    >
+                        0
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="eventsList"
+                    class="events-list"
+                >
+                </div>
+
+            </section>
+
+        </aside>
+
+
+        <!-- =================================================
+             WORKSPACE
+        ================================================== -->
+
+        <section class="workspace">
+
+
+            <div class="workspace-header">
+
+                <div>
+
+                    <h1>
+                        Центр диспетчеризации
+                    </h1>
+
+                    <p>
+                        Автоматический подбор авиатехников
+                        и контроль выполнения заявок
+                    </p>
+
+                </div>
+
+
+                <div class="workspace-actions">
+
+                    <div class="mini-status">
+                        Норматив
+                        <strong>15:00</strong>
+                    </div>
+
+                    <div class="mini-status">
+                        Карта
+                        <strong class="yellow">
+                            В разработке
+                        </strong>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 WORKFLOW
+            ================================================== -->
+
+            <section class="workflow">
+
+                <div class="workflow-step active">
+                    <span>01</span>
+                    Заявка
+                </div>
+
+                <div class="workflow-line"></div>
+
+                <div class="workflow-step">
+                    <span>02</span>
+                    Подбор
+                </div>
+
+                <div class="workflow-line"></div>
+
+                <div class="workflow-step">
+                    <span>03</span>
+                    Прибытие
+                </div>
+
+                <div class="workflow-line"></div>
+
+                <div class="workflow-step">
+                    <span>04</span>
+                    Работа
+                </div>
+
+                <div class="workflow-line"></div>
+
+                <div class="workflow-step">
+                    <span>05</span>
+                    Устранено
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 ACTIVE REQUESTS
+            ================================================== -->
+
+            <section class="content-panel">
+
+                <div class="panel-heading">
+
+                    <div>
+                        <div class="section-title">
+                            Активные заявки
+                        </div>
+
+                        <div class="section-subtitle">
+                            Текущее состояние диспетчеризации
+                        </div>
+                    </div>
+
+                    <span
+                        class="counter"
+                        id="activeCount"
+                    >
+                        0
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="requestsList"
+                    class="requests-list"
+                >
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 SECOND ROW
+            ================================================== -->
+
+            <div class="dashboard-grid">
+
+
+                <section class="content-panel history-panel">
+
+                    <div class="panel-heading">
+
+                        <div>
+                            <div class="section-title">
+                                История
+                            </div>
+
+                            <div class="section-subtitle">
+                                Последние завершённые заявки
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <div
+                        id="historyList"
+                        class="history-list"
+                    >
+                    </div>
+
+                </section>
+
+
+                <section class="content-panel map-placeholder">
+
+                    <div class="map-placeholder-inner">
+
+                        <div class="map-icon">
+                            MAP
+                        </div>
+
+                        <div class="map-placeholder-title">
+                            Интерактивная карта
+                        </div>
+
+                        <div class="map-placeholder-text">
+                            Карта аэропорта будет подключена
+                            после завершения отдельного
+                            этапа визуализации и графа маршрутов.
+                        </div>
+
+                        <div class="map-placeholder-status">
+                            В РАЗРАБОТКЕ
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- =====================================================
+         CREATE REQUEST MODAL
+    ====================================================== -->
+
+    <div
+        id="requestModal"
+        class="modal hidden"
+    >
+
+        <div class="modal-backdrop"></div>
+
+
+        <div class="modal-window">
+
+            <div class="modal-header">
+
+                <div>
+
+                    <div class="modal-title">
+                        Новая заявка
+                    </div>
+
+                    <div class="modal-subtitle">
+                        Создание технического вызова
+                    </div>
+
+                </div>
+
+                <button
+                    id="closeModalButton"
+                    class="close-btn"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <form id="requestForm">
+
+
+                <div class="form-grid">
+
+
+                    <div class="form-group">
+
+                        <label for="aircraft">
+                            Воздушное судно
+                        </label>
+
+                        <select
+                            id="aircraft"
+                            required
+                        >
+
+                            <option value="ВС-01">
+                                ВС-01
+                            </option>
+
+                            <option value="ВС-02">
+                                ВС-02
+                            </option>
+
+                            <option value="ВС-03" selected>
+                                ВС-03
+                            </option>
+
+                            <option value="ВС-04">
+                                ВС-04
+                            </option>
+
+                            <option value="ВС-05">
+                                ВС-05
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="priority">
+                            Приоритет
+                        </label>
+
+                        <select id="priority">
+
+                            <option value="normal">
+                                Обычная
+                            </option>
+
+                            <option value="emergency">
+                                ЧС
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="form-group full">
+
+                        <label for="defect">
+                            Описание дефекта
+                        </label>
+
+                        <textarea
+                            id="defect"
+                            rows="4"
+                            maxlength="500"
+                            placeholder="Например: появилась сильная вибрация двигателя при запуске..."
+                            required
+                        ></textarea>
+
+                        <div class="field-hint">
+                            По тексту система попробует автоматически
+                            определить необходимую квалификацию.
+                        </div>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="qualification">
+                            Квалификация
+                        </label>
+
+                        <select id="qualification">
+
+                            <option value="auto">
+                                Автоопределение
+                            </option>
+
+                            <option value="airframe">
+                                Планер
+                            </option>
+
+                            <option value="engine">
+                                Двигатель
+                            </option>
+
+                            <option value="avionics">
+                                Авионика
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label for="notes">
+                            Дополнительно
+                        </label>
+
+                        <input
+                            id="notes"
+                            maxlength="500"
+                            placeholder="Необязательно"
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="formError"
+                    class="form-error hidden"
+                >
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button
+                        type="button"
+                        id="cancelModalButton"
+                        class="secondary-btn"
+                    >
+                        Отмена
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="submit-btn"
+                    >
+                        Создать и назначить
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         TOAST
+    ====================================================== -->
+
+    <div
+        id="toastContainer"
+        class="toast-container"
+    >
+    </div>
+
+
+    <script src="/static/app.js"></script>
+
+</div>
+
+</body>
+
+</html>
