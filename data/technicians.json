@@ -1,0 +1,11 @@
+[
+  {"name": "Агент 1", "qual": "Планер",    "speed": 4.0, "base": "BASE1"},
+  {"name": "Агент 2", "qual": "Авионика",  "speed": 4.0, "base": "BASE3"},
+  {"name": "Агент 3", "qual": "Двигатель", "speed": 3.5, "base": "BASE2"},
+  {"name": "Агент 4", "qual": "Планер",    "speed": 3.0, "base": "BASE2"},
+  {"name": "Агент 5", "qual": "Двигатель", "speed": 4.5, "base": "BASE1"},
+  {"name": "Агент 6", "qual": "Авионика",  "speed": 5.0, "base": "BASE2"},
+  {"name": "Агент 7", "qual": "Планер",    "speed": 5.2, "base": "BASE3"},
+  {"name": "Агент 8", "qual": "Двигатель", "speed": 3.0, "base": "BASE3"},
+  {"name": "Агент 9", "qual": "Авионика",  "speed": 3.2, "base": "BASE1"}
+]
