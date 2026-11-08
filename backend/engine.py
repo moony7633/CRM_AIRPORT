@@ -21,6 +21,17 @@ STATUS_RU = {
 WORK_EST_SEC = 300.0
 
 AIRCRAFT_MODELS = ["B737-800", "A320", "B777-300ER", "A330-300", "SSJ-100", "A350-900"]
+TYPE_FAMILIES = ("A320", "A330", "A350", "B737", "B777", "B787", "SSJ-100", "MC-21")
+
+
+def type_family(model):
+    """B737-800 -> B737, A320 -> A320. Нужна для допусков на тип ВС."""
+    m = (model or "").upper()
+    for fam in TYPE_FAMILIES:
+        if m.startswith(fam):
+            return fam
+    return m
+
 AIRCRAFT_SPEED = 6.0
 AIRCRAFT_SPAWN_INTERVAL = 180.0
 AIRCRAFT_PARK_DURATION = 1800.0
@@ -32,11 +43,11 @@ AS_DEPARTING = "departing"
 AS_RU = {AS_INBOUND: "Прилёт", AS_PARKED: "На стоянке", AS_DEPARTING: "Вылет"}
 
 GSE_TYPES = {
-    "fuel":     {"label": "Заправка",  "short": "FUEL", "color": "#FFB700", "duration": 140, "lane":  28},
-    "catering": {"label": "Питание",   "short": "CATE", "color": "#FF6B3D", "duration": 110, "lane": -28},
-    "baggage":  {"label": "Багаж",     "short": "BAGG", "color": "#A97CFF", "duration": 150, "lane":  36},
-    "cleaning": {"label": "Уборка",    "short": "CLEA", "color": "#00D69A", "duration": 90,  "lane": -36},
-    "pushback": {"label": "Отправка",  "short": "PUSH", "color": "#E9491C", "duration": 60,  "lane":   0},
+    "fuel":     {"label": "Заправка",  "short": "FUEL", "color": "#A9833E", "duration": 140, "lane":  28},
+    "catering": {"label": "Питание",   "short": "CATE", "color": "#B36F4C", "duration": 110, "lane": -28},
+    "baggage":  {"label": "Багаж",     "short": "BAGG", "color": "#7D689C", "duration": 150, "lane":  36},
+    "cleaning": {"label": "Уборка",    "short": "CLEA", "color": "#5B826C", "duration": 90,  "lane": -36},
+    "pushback": {"label": "Отправка",  "short": "PUSH", "color": "#B2503A", "duration": 60,  "lane":   0},
 }
 GSE_SPEED = 5.0
 GSE_UNITS_PER_TYPE = 2
@@ -73,10 +84,11 @@ def _random_flight():
 
 
 class Tech:
-    def __init__(self, tid, name, qual, speed, base_id, node, xy):
+    def __init__(self, tid, name, qual, speed, base_id, node, xy, types=None):
         self.id, self.name, self.qual, self.speed = tid, name, qual, float(speed)
         self.base_id, self.node = base_id, node
         self.x, self.y = xy
+        self.types = tuple(types or ())   # допуски на типы ВС; пусто = без ограничений
         self.status = "free"
         self.request_id = None
         self.route = None
@@ -88,6 +100,7 @@ class Tech:
         left = self.route.remaining(self.travelled) if self.route else []
         return {
             "id": self.id, "name": self.name, "qual": self.qual, "speed": self.speed,
+            "types": list(self.types),
             "status": self.status, "request_id": self.request_id, "base": self.base_id,
             "x": round(self.x, 1), "y": round(self.y, 1),
             "route": [[round(px, 1), round(py, 1)] for px, py in left],
@@ -247,7 +260,8 @@ class Engine:
         for i, c in enumerate(self.techs_cfg, 1):
             base_id = c.get("base") if c.get("base") in self.bases else base_ids[(i - 1) % len(base_ids)]
             node = self.bases[base_id]["node"]
-            self.techs[i] = Tech(i, c["name"], c["qual"], c["speed"], base_id, node, self.graph.nodes[node])
+            self.techs[i] = Tech(i, c["name"], c["qual"], c["speed"], base_id, node,
+                                 self.graph.nodes[node], c.get("types"))
 
     def _build_gse(self):
         self.gse = {}
@@ -443,6 +457,12 @@ class Engine:
     def evaluate(self, req):
         stand_node = self.stands[req["stand"]]["node"]
         dist, prev = self.graph.tree(stand_node)
+        # тип ВС: по привязанному рейсу или по борту, который стоит на стоянке
+        ac = self.aircraft.get(req.get("aircraft_id")) if req.get("aircraft_id") else None
+        if ac is None:
+            ac = next((a for a in self.aircraft.values()
+                       if a.stand_id == req["stand"] and a.status == AS_PARKED), None)
+        fam = type_family(ac.model) if ac else None
         rows = []
         for t in self.techs.values():
             if t.qual != req["qual"]:
@@ -452,10 +472,15 @@ class Engine:
 
             row = {
                 "tech_id": t.id, "name": t.name, "speed": t.speed, "qual": t.qual,
+                "types": list(t.types),
                 "dist": None, "eta": None, "delay": round(delay, 1),
                 "busy": t.status == "busy", "busy_em": False, "working": False,
                 "ok": False, "reason": "",
             }
+            if fam and t.types and fam not in t.types:
+                row["reason"] = f"нет допуска на {fam}"
+                rows.append(row)
+                continue
             if t.status == "busy":
                 cur = self.requests.get(t.request_id)
                 row["busy_em"] = bool(cur and cur["priority"] == "emergency")
