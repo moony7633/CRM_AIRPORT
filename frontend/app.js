@@ -13,7 +13,7 @@ const clockHM = simSec => {
 };
 const NS = 'http://www.w3.org/2000/svg';
 const QCOL = {'Планер': 'var(--glider)', 'Двигатель': 'var(--engine)', 'Авионика': 'var(--avionics)'};
-const AC_COL = {inbound: '#7DE0B6', parked: '#6FA8E0', departing: '#FFA168'};
+const AC_COL = {inbound: '#5D8568', parked: '#577491', departing: '#AC7444'};
 const NORM = 900;
 
 let AIR = null, S = null, ws = null;
@@ -114,10 +114,25 @@ function buildMap() {
   const svg = $('#map');
   if (!svg) return;
   svg.innerHTML = '';
-  vb = {x: 0, y: 0, w: AIR.width, h: AIR.height};
-  applyVB();
   const N = Object.fromEntries(AIR.nodes.map(n => [n.id, n]));
-  const gA = el('g', {}, svg), gR = el('g', {}, svg), gE = el('g', {}, svg),
+  // стартовый вид — на перрон, а не на весь аэродром: на реальной карте
+  // весь SVO/DME занимает 5–8 км и стоянки в общем виде теряются
+  const standPts = (AIR.stands || []).map(s => N[s.node]).filter(Boolean);
+  if (standPts.length) {
+    const xs = standPts.map(p => p.x), ys = standPts.map(p => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    let w = Math.max(...xs) - Math.min(...xs) + 700;
+    let h = Math.max(...ys) - Math.min(...ys) + 700;
+    const ar = (window.innerWidth || 16) / (window.innerHeight || 9);
+    if (w / h < ar) w = h * ar; else h = w / ar;
+    vb = {x: cx - w / 2, y: cy - h / 2, w, h};
+  } else {
+    vb = {x: 0, y: 0, w: AIR.width, h: AIR.height};
+  }
+  applyVB();
+  const gA = el('g', {}, svg), gP = el('g', {id: 'parking'}, svg),
+        gR = el('g', {}, svg), gE = el('g', {}, svg),
         gAlt = el('g', {id: 'alt'}, svg), gRoute = el('g', {id: 'routes'}, svg);
   const gB = el('g', {}, svg), gS = el('g', {}, svg),
         gGSE = el('g', {id: 'gse'}, svg),
@@ -128,6 +143,9 @@ function buildMap() {
     const p = el('polygon', {points: a.points.map(q => q.join(',')).join(' '), class: 'area-' + a.kind}, gA);
     p.setAttribute('stroke-width', 4);
     el('title', {}, p).textContent = a.name || a.kind;
+  });
+  (AIR.parking || []).forEach(p => {
+    el('polygon', {points: p.points.map(q => q.join(',')).join(' '), class: 'parking'}, gP);
   });
   (AIR.runways || []).forEach(r => {
     const pts = r.points.map(q => q.join(',')).join(' ');
@@ -250,9 +268,13 @@ function initMapEvents() {
       api(`/api/edges/${id}/block`, {blocked: !S.blocked.includes(id)}).catch(() => {});
     } else { selAircraft = null; selReq = null; render(); }
   });
-  const zi = $('#zin'); if (zi) zi.onclick = () => zoom(0.8);
-  const zo = $('#zout'); if (zo) zo.onclick = () => zoom(1.25);
-  const zf = $('#zfit'); if (zf) zf.onclick = () => { vb = {x: 0, y: 0, w: AIR.width, h: AIR.height}; applyVB(); };
+  const zi = $('#zin'); if (zi) zi.onclick = () => Map3D.isActive() ? Map3D.zoom(0.8) : zoom(0.8);
+  const zo = $('#zout'); if (zo) zo.onclick = () => Map3D.isActive() ? Map3D.zoom(1.25) : zoom(1.25);
+  const zf = $('#zfit'); if (zf) zf.onclick = () => {
+    if (Map3D.isActive()) { Map3D.fit(false); return; }
+    vb = {x: 0, y: 0, w: AIR.width, h: AIR.height}; applyVB();
+  };
+  const v3 = $('#view3d'); if (v3) v3.onclick = () => Map3D.setActive(!Map3D.isActive());
 }
 function renderMap() {
   const seenAc = new Set();
@@ -304,7 +326,7 @@ function renderMap() {
         if (!c.path || c.path.length < 2) return;
         if (c.reason && c.reason.startsWith('выбран')) return;
         const tech = S.techs.find(t => t.id === c.tech_id);
-        const col = tech ? QCOL[tech.qual] : '#556';
+        const col = tech ? QCOL[tech.qual] : '#8A8272';
         el('polyline', {class: 'alt-route', points: c.path.map(p => p.join(',')).join(' '), stroke: col}, alt);
       });
     }
@@ -439,29 +461,38 @@ function boardRow(a) {
     if (prog >= 100) badgeCls = 'bd-badge st-ready';
   }
 
-  const timeCell = actualTime
-    ? `<span class="bd-sched">${schedTime}</span> <span class="bd-actual">${actualTime}</span>`
-    : `<span class="bd-sched">${schedTime}</span>${delayed ? ` <span class="bd-delay">+${Math.round(delaySec/60)}м</span>` : ''}`;
-
   const svcBar = a.services && a.services.length
     ? `<div class="board-bar"><i style="width:${a.services_progress || 0}%"></i></div>` : '';
 
-  return `<tr class="board-row ac-${a.status}${selAircraft === a.id ? ' sel' : ''}" data-ac-row="${a.id}">
-    <td class="bd-time">${timeCell}</td>
-    <td class="bd-flight">${esc(a.flight)}</td>
-    <td class="bd-airline">${esc(airline)}<small class="muted"> ${esc(reg)}</small></td>
-    <td class="bd-route">${route}<small class="muted"> ${esc(b.destination?.city || '')}</small></td>
-    <td class="bd-model">${esc(a.model)}</td>
-    <td class="bd-stand">${esc(a.stand || '—')}</td>
-    <td class="bd-gate">${esc(b.gate || '—')}</td>
-    <td class="bd-status"><span class="${badgeCls}">${esc(badgeTxt)}</span>${svcBar}</td>
-  </tr>`;
+  const when = actualTime
+    ? `<b class="bd-time">${actualTime}</b><span class="bd-sched">факт</span>`
+    : `<b class="bd-time">${schedTime}</b>${delayed
+        ? `<span class="bd-delay">+${Math.round(delaySec / 60)}м</span>`
+        : `<span class="bd-sched">план</span>`}`;
+
+  return `<button type="button" class="board-row ac-${a.status}${selAircraft === a.id ? ' sel' : ''}" data-ac-row="${a.id}">
+    <span class="bd-when">${when}</span>
+    <span class="bd-main">
+      <span class="bd-line">
+        <b class="bd-flight">${esc(a.flight)}</b>
+        <span class="bd-airline">${esc(airline)}</span>
+        <span class="bd-reg">${esc(reg)}</span>
+      </span>
+      <span class="bd-sub">
+        <span class="bd-route">${route}</span>
+        <span class="bd-model">${esc(a.model)}</span>
+        <span class="bd-stand">Стоянка ${esc(a.stand || '—')}</span>
+        ${b.gate ? `<span class="bd-gate">Выход ${esc(b.gate)}</span>` : ''}
+      </span>
+    </span>
+    <span class="bd-status"><span class="${badgeCls}">${esc(badgeTxt)}</span>${svcBar}</span>
+  </button>`;
 }
 function renderBoard() {
   const list = (S.aircraft || []).slice().sort((a, b) => a.id - b.id);
   const header = `
     <div class="board-head">
-      <div class="board-title">ТАБЛО РЕЙСОВ</div>
+      <div class="board-title">Табло рейсов</div>
       <div class="board-time">${new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}
         <small>местное время</small></div>
     </div>`;
@@ -469,19 +500,13 @@ function renderBoard() {
     return header + '<p class="empty">Рейсов нет. Борта прилетают автоматически или по кнопке «+ Рейс».</p>';
   }
   const rows = list.map(boardRow).join('');
-  return header + `<table class="board-table">
-    <thead><tr>
-      <th>Время</th><th>Рейс</th><th>Авиакомпания</th><th>Направление</th>
-      <th>Тип</th><th>Стоянка</th><th>Выход</th><th>Статус</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+  return header + `<div class="board-list">${rows}</div>`;
 }
 function techRow(t) {
   const st = t.status === 'free' ? 'Свободен' : 'Занят';
   return `<div class="trow${selTech === t.id ? ' sel' : ''}" data-tech-row="${t.id}">
     <span class="dot" style="background:${QCOL[t.qual]}"></span>
-    <div class="grow"><b>${esc(t.name)}</b><small>${esc(t.qual)}, ${t.speed} м/с</small></div>
+    <div class="grow"><b>${esc(t.name)}</b><small>${esc(t.qual)} · ${(t.types || []).join(', ') || 'все типы'} · ${t.speed} м/с</small></div>
     <div>${st}${t.request_id ? `<small>заявка #${t.request_id}</small>` : ''}</div></div>`;
 }
 function render() {
@@ -522,6 +547,10 @@ function render() {
   renderLive();
   renderDetail();
   renderMap();
+  if (typeof Map3D !== 'undefined') Map3D.update(S, {
+    tech: selTech, aircraft: selAircraft,
+    stand: selReq ? (S.active.find(q => q.id === selReq)?.stand || null) : null,
+  });
 }
 function renderLive() {
   S.active.forEach(r => {
@@ -774,6 +803,13 @@ function initUI() {
     initUI();
     initMapEvents();
     buildMap();
+    Map3D.init(AIR, {
+      onStand: id => openDialog(id),
+      onAircraft: id => { selAircraft = id; selReq = null; render(); },
+    });
+    if (new URLSearchParams(location.search).get('view') === '3d' || location.hash === '#3d') {
+      Map3D.setActive(true);
+    }
     render();
   } catch (e) {
     console.error('Ошибка инициализации:', e);
