@@ -4,11 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Аэрофлот · Умная диспетчеризация ОТО</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="dispatcher">
 
 <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Карта перрона"></svg>
+<canvas id="map3d" hidden aria-label="3D-карта перрона"></canvas>
 <div class="map-vignette" aria-hidden="true"></div>
 
 <header class="top glass">
@@ -16,13 +18,7 @@
     <div class="logo" aria-hidden="true">
       <svg viewBox="0 0 40 40" width="28" height="28">
         <path d="M20 3 L23 15 L36 22 L36 26 L23 22 L22 30 L28 34 L28 37 L20 35 L12 37 L12 34 L18 30 L17 22 L4 26 L4 22 L17 15 Z"
-              fill="url(#lg)"/>
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#7FB0EA"/>
-            <stop offset="1" stop-color="#0F4C9E"/>
-          </linearGradient>
-        </defs>
+              fill="#C2603F"/>
       </svg>
     </div>
     <div>
@@ -34,8 +30,8 @@
   <section class="stats" id="stats"></section>
 
   <div class="controls">
-    <span class="llm-pill" id="llmPill" title="Провайдер генерации карточек рейсов">🤖 <b id="llmModel">—</b></span>
-    <span class="norm-pill" title="Регламент 15 минут">⏱ <b>15:00</b></span>
+    <span class="llm-pill" id="llmPill" title="Провайдер генерации карточек рейсов">LLM <b id="llmModel">—</b></span>
+    <span class="norm-pill" title="Регламент 15 минут">Норматив <b>15:00</b></span>
     <label title="Скорость модельного времени">
       <select id="speed" class="dispatcher-only">
         <option value="1">×1</option><option value="5">×5</option>
@@ -81,18 +77,19 @@
   <span><i style="background:var(--engine)"></i>Двигатель</span>
   <span><i style="background:var(--avionics)"></i>Авионика</span>
   <span class="sep"></span>
-  <span><i style="background:#7DE0B6"></i>Прилёт</span>
-  <span><i style="background:#6FA8E0"></i>На стоянке</span>
-  <span><i style="background:#FFA168"></i>Вылет</span>
+  <span><i style="background:var(--inbound)"></i>Прилёт</span>
+  <span><i style="background:var(--parked)"></i>На стоянке</span>
+  <span><i style="background:var(--departing)"></i>Вылет</span>
   <span class="sep"></span>
-  <span><i style="background:#FFB700"></i>Заправка</span>
-  <span><i style="background:#FF6B3D"></i>Питание</span>
-  <span><i style="background:#A97CFF"></i>Багаж</span>
-  <span><i style="background:#00D69A"></i>Уборка</span>
-  <span><i style="background:#E9491C"></i>Pushback</span>
+  <span><i style="background:var(--svc-fuel)"></i>Заправка</span>
+  <span><i style="background:var(--svc-catering)"></i>Питание</span>
+  <span><i style="background:var(--svc-baggage)"></i>Багаж</span>
+  <span><i style="background:var(--svc-cleaning)"></i>Уборка</span>
+  <span><i style="background:var(--svc-pushback)"></i>Pushback</span>
 </div>
 
 <div class="map-tools glass">
+  <button id="view3d" title="Переключить 2D / 3D">3D</button>
   <button id="zin"  title="Приблизить">+</button>
   <button id="zout" title="Отдалить">−</button>
   <button id="zfit" title="Весь аэропорт">⌂</button>
@@ -127,6 +124,7 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
+<script src="/static/map3d.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
