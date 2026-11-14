@@ -23,6 +23,23 @@ WORK_EST_SEC = 300.0
 AIRCRAFT_MODELS = ["B737-800", "A320", "B777-300ER", "A330-300", "SSJ-100", "A350-900"]
 TYPE_FAMILIES = ("A320", "A330", "A350", "B737", "B777", "B787", "SSJ-100", "MC-21")
 
+def xy_to_gps(x, y, geo):
+    """Локальные координаты (пиксели) → WGS84.
+
+    ВАЖНО: y в пикселях растёт вниз (юг), а lat — вверх (север).
+    Поэтому vy = -y, иначе GPS отзеркален по широте (~6 км в сторону).
+    """
+    a = math.radians(geo.get("rot_deg", 0.0))
+    vx, vy = x, -y
+    lat = geo["lat0"] + (vx * math.sin(a) + vy * math.cos(a)) * geo.get("scale", 1.0) / 111320.0
+    lon = geo["lon0"] + (vx * math.cos(a) - vy * math.sin(a)) * geo.get("scale", 1.0) / (
+        111320.0 * math.cos(math.radians(geo["lat0"]))
+    )
+    return {"lat": round(lat, 6), "lon": round(lon, 6)}
+
+
+DEFAULT_GEO = {"lat0": 55.989656, "lon0": 37.326358, "scale": 1.0017, "rot_deg": 0.008}
+
 
 def type_family(model):
     """B737-800 -> B737, A320 -> A320. Нужна для допусков на тип ВС."""
@@ -228,6 +245,7 @@ class GSE:
 
 class Engine:
     def __init__(self, airport, techs_cfg, db, sim_speed=10.0):
+        self.geo = {**DEFAULT_GEO, **(airport.get("geo") or {})}
         self.airport = airport
         self.graph = Graph(airport["nodes"], airport["edges"])
         self.stands = {s["id"]: s for s in airport["stands"]}
@@ -1042,11 +1060,22 @@ class Engine:
         active = sorted((v for v in views if v["status"] in ACTIVE),
                         key=lambda v: (v["priority"] != "emergency", v["id"]))
         history = sorted((v for v in views if v["status"] not in ACTIVE), key=lambda v: -v["id"])[:100]
+
+        def with_gps(d, x, y):
+            d["gps"] = xy_to_gps(x, y, self.geo)
+            return d
+
+        stand_gps = {sid: xy_to_gps(*self.graph.nodes[s["node"]], self.geo)
+                     for sid, s in self.stands.items()}
+        for v in views:
+            v["stand_gps"] = stand_gps.get(v["stand"])
+
         return {
             "sim_time": round(self.sim_time, 1), "sim_speed": self.sim_speed, "norm": NORM_SEC,
-            "techs": [t.to_dict() for t in self.techs.values()],
-            "aircraft": [a.to_dict(self.sim_time) for a in self.aircraft.values()],
-            "gse": [g.to_dict() for g in self.gse.values()],
+            "geo": self.geo,
+            "techs": [with_gps(t.to_dict(), t.x, t.y) for t in self.techs.values()],
+            "aircraft": [with_gps(a.to_dict(self.sim_time), a.x, a.y) for a in self.aircraft.values()],
+            "gse": [with_gps(g.to_dict(), g.x, g.y) for g in self.gse.values()],
             "gse_types": {k: {"label": v["label"], "color": v["color"],
                               "short": v["short"], "lane": v.get("lane", 0)}
                           for k, v in GSE_TYPES.items()},
