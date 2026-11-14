@@ -2,6 +2,7 @@
  "name": "Шереметьево (SVO · UUEE)",
  "schematic": false,
  "source": "© участники OpenStreetMap (ODbL)",
+ "geo": {"lat0": 55.989656, "lon0": 37.326358, "scale": 1.0017, "rot_deg": 0.008},
  "width": 7598,
  "height": 3225,
  "runways": [
