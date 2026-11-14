@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .db import DB
-from .engine import Engine
+from .engine import Engine, xy_to_gps   # <- добавить xy_to_gps
 
 ROOT = Path(__file__).resolve().parent.parent
 AIRPORT_FILE = Path(os.environ.get("AIRPORT_FILE", ROOT / "data" / "airport_demo.json"))
@@ -92,7 +92,22 @@ class SpeedBody(BaseModel):
 @app.get("/api/airport")
 def get_airport():
     edges = [{**e, "length": round(e["length"], 1)} for e in engine.graph.edges.values()]
-    return {**airport, "edges": edges}
+    stands = [{**s, "gps": xy_to_gps(*engine.graph.nodes[s["node"]], engine.geo)}
+              for s in airport["stands"]]
+    return {**airport, "stands": stands, "edges": edges, "geo": engine.geo}
+
+
+@app.get("/sw.js")
+def sw():
+    return FileResponse(ROOT / "frontend" / "sw.js",
+                        media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(ROOT / "frontend" / "manifest.webmanifest",
+                        media_type="application/manifest+json")
 
 
 @app.get("/api/state")
