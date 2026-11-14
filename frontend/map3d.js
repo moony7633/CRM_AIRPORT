@@ -1,5 +1,4 @@
-/* Лёгкий 3D-вид перрона: canvas 2D, изометрия с перспективой, без внешних библиотек.
-   Специально минимальный: один проход отрисовки по событию, DPR ≤ 1.5, без rAF-цикла. */
+/* Лёгкий 3D-вид перрона: canvas 2D, изометрия с перспективой, без внешних библиотек. */
 const Map3D = (() => {
   const QCOL = {'Планер': '#4F6F91', 'Двигатель': '#B06B43', 'Авионика': '#796289'};
   const AC_COL = {inbound: '#5D8568', parked: '#577491', departing: '#AC7444'};
@@ -15,6 +14,7 @@ const Map3D = (() => {
   let hit = [], raf = 0, cb = {};
   let fitted = false;
   let fast = false, fastTimer = 0;
+  let showGps = true;
 
   const nodes = new Map();
   const stands = [], bases = [];
@@ -58,7 +58,6 @@ const Map3D = (() => {
   function screenScale(cam) { return cam.f / Math.max(dist, 1); }
 
   function drawGround(cam) {
-    // сетка земли — чтобы 3D не «висел в пустоте»
     const step = 250, ext = 6000;
     ctx.strokeStyle = 'rgba(107,94,73,.10)';
     ctx.lineWidth = 1;
@@ -73,7 +72,6 @@ const Map3D = (() => {
     }
     ctx.stroke();
 
-    // перроны
     ctx.fillStyle = '#E6DED0';
     for (const a of areas) {
       if (a.kind !== 'apron') continue;
@@ -85,7 +83,6 @@ const Map3D = (() => {
       ctx.lineWidth = 1;
       ctx.stroke(path);
     }
-    // разметка всех мест стоянок (только вблизи, чтобы не тратить кадры)
     if (!fast && dist < 5200) {
       ctx.strokeStyle = 'rgba(141,126,101,.55)';
       ctx.lineWidth = Math.max(0.7, Math.min(2, screenScale(cam) * 4));
@@ -99,7 +96,6 @@ const Map3D = (() => {
       }
       ctx.stroke(path);
     }
-    // ВПП
     const sc = screenScale(cam);
     for (const r of runways) {
       const w = Math.max(2, (r.width || 45) * sc);
@@ -120,7 +116,6 @@ const Map3D = (() => {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    // рулёжки + перронные проезды
     const tw = Math.max(0.9, Math.min(26, 22 * sc));
     for (const kind of ['taxiway', 'apron']) {
       const w = kind === 'apron' ? tw * 0.55 : tw;
@@ -203,7 +198,6 @@ const Map3D = (() => {
       ctx.lineWidth = isSel ? 2.6 : 1.6;
       ctx.strokeStyle = isSel ? '#23221F' : isEm ? '#A9433C' : isHot ? '#C2603F' : '#B5AB98';
       ctx.stroke();
-      // крест стоянки
       ctx.strokeStyle = isEm ? '#A9433C' : '#B5AB98';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -256,6 +250,16 @@ const Map3D = (() => {
       ctx.lineWidth = 1.4;
       ctx.stroke();
       if (t.route && t.route.length > 1) drawRoute(cam, t.route, (QCOL[t.qual] || '#8A8272') + '88', 2.2);
+
+      if (showGps && t.gps) {
+        ctx.font = '500 7px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillStyle = 'rgba(80,72,58,.62)';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = PAPER; ctx.shadowBlur = 3;
+        ctx.fillText(`${t.gps.lat.toFixed(5)}, ${t.gps.lon.toFixed(5)}`, p.x, p.y + 14);
+        ctx.shadowBlur = 0;
+      }
+
       hit.push({x: p.x, y: p.y, r: 9, type: 'tech', id: t.id});
     }
   }
@@ -298,6 +302,14 @@ const Map3D = (() => {
         ctx.fillText(a.flight, p.x, p.y - size - 6);
         ctx.shadowBlur = 0;
       }
+      if (showGps && a.gps) {
+        ctx.font = '500 8px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(80,72,58,.72)';
+        ctx.shadowColor = PAPER; ctx.shadowBlur = 4;
+        ctx.fillText(`${a.gps.lat.toFixed(5)}, ${a.gps.lon.toFixed(5)}`, p.x, p.y + size + 14);
+        ctx.shadowBlur = 0;
+      }
       hit.push({x: p.x, y: p.y, r: 14, type: 'aircraft', id: a.id});
     }
   }
@@ -313,6 +325,15 @@ const Map3D = (() => {
       ctx.fillStyle = g.color || '#A9833E';
       ctx.fillRect(-size/2, -size/3, size, size*0.66);
       ctx.restore();
+
+      if (showGps && g.gps) {
+        ctx.font = '500 7px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(80,72,58,.62)';
+        ctx.shadowColor = PAPER; ctx.shadowBlur = 3;
+        ctx.fillText(`${g.gps.lat.toFixed(5)}, ${g.gps.lon.toFixed(5)}`, p.x, p.y + size + 10);
+        ctx.shadowBlur = 0;
+      }
     }
   }
 
@@ -339,7 +360,6 @@ const Map3D = (() => {
 
     drawStands(cam, hot, parked, selStand);
     drawBases(cam);
-    // маршруты самолётов и GSE до объектов
     for (const a of S.aircraft || []) if (a.route && a.route.length > 1) drawRoute(cam, a.route, 'rgba(93,133,104,.52)', 2);
     for (const gse of S.gse || []) if (gse.route && gse.route.length > 1) drawRoute(cam, gse.route, (gse.color || '#A9833E') + '66', 1.6);
     drawGse(cam);
@@ -393,6 +413,8 @@ const Map3D = (() => {
   }
 
   function zoom(k) { dist = Math.min(20000, Math.max(160, dist * k)); schedule(); }
+
+  function setShowGps(v) { showGps = !!v; schedule(); }
 
   function init(airport, handlers) {
     AIR = airport; cb = handlers || {};
@@ -490,5 +512,5 @@ const Map3D = (() => {
     if (active) schedule();
   }
 
-  return {init, update, setActive, zoom, fit, isActive: () => active, resize};
+  return {init, update, setActive, zoom, fit, isActive: () => active, resize, setShowGps};
 })();
