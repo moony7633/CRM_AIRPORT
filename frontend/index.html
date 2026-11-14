@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Аэрофлот · Умная диспетчеризация ОТО</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css"><link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0a0e17">
 </head>
 <body class="dispatcher">
 
@@ -18,7 +19,7 @@
     <div class="logo" aria-hidden="true">
       <svg viewBox="0 0 40 40" width="28" height="28">
         <path d="M20 3 L23 15 L36 22 L36 26 L23 22 L22 30 L28 34 L28 37 L20 35 L12 37 L12 34 L18 30 L17 22 L4 26 L4 22 L17 15 Z"
-              fill="#C2603F"/>
+              fill="currentColor"/>
       </svg>
     </div>
     <div>
@@ -32,6 +33,11 @@
   <div class="controls">
     <span class="llm-pill" id="llmPill" title="Провайдер генерации карточек рейсов">LLM <b id="llmModel">—</b></span>
     <span class="norm-pill" title="Регламент 15 минут">Норматив <b>15:00</b></span>
+    <label class="gps-toggle" title="Показывать GPS-координаты объектов">
+      <input type="checkbox" id="chkGps" checked>
+      GPS
+    </label>
+    <button id="themeToggle" class="theme-btn" title="Сменить тему">🌙</button>
     <label title="Скорость модельного времени">
       <select id="speed" class="dispatcher-only">
         <option value="1">×1</option><option value="5">×5</option>
@@ -126,5 +132,42 @@
 <div id="toast" class="toast" hidden></div>
 <script src="/static/map3d.js"></script>
 <script src="/static/app.js"></script>
+<div id="net-banner" style="
+  display:none; position:fixed; top:0; left:0; right:0; z-index:9999;
+  background:#3a2a10; color:#f0b429; padding:6px 12px; text-align:center;
+  font:13px system-ui; border-bottom:1px solid #5a4318;
+"></div>
+
+<script>
+/* ---- Service Worker ---- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW:', err));
+  });
+}
+
+/* ---- Индикатор офлайна + кэш последнего снапшота ---- */
+const banner = document.getElementById('net-banner');
+function setOnline() {
+  if (navigator.onLine) banner.style.display = 'none';
+  else {
+    const ts = localStorage.getItem('snapshot_ts') || '—';
+    banner.style.display = 'block';
+    banner.textContent = `⚫ Офлайн — данные от ${ts}`;
+  }
+}
+window.addEventListener('online', setOnline);
+window.addEventListener('offline', setOnline);
+setOnline();
+
+const cached = localStorage.getItem('snapshot');
+if (cached) {
+  setTimeout(() => {
+    if (!navigator.onLine || (window.__ws && window.__ws.readyState !== 1)) {
+      try { typeof applySnapshot === 'function' && applySnapshot(JSON.parse(cached)); } catch(e) {}
+    }
+  }, 3000);
+}
+</script>
 </body>
 </html>
