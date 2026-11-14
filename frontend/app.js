@@ -20,10 +20,16 @@ let AIR = null, S = null, ws = null;
 let role = 'dispatcher';
 try { role = localStorage.getItem('role') || 'dispatcher'; } catch (e) {}
 let selReq = null, selTech = null, selAircraft = null;
+let showGps = true;
+try { showGps = localStorage.getItem('showGps') !== 'false'; } catch (e) {}
 const openCands = new Set();
 const cache = {};
 const mapEl = {edges: {}, stands: {}, techs: {}, aircraft: {}, gse: {}};
 let vb = {x: 0, y: 0, w: 1, h: 1};
+
+/* Кеш карточки правой панели. Учитываем наличие gps в снапшоте —
+   чтобы карточка перерисовалась, если gps появился позже. */
+let _detailCache = { id: null, status: null, sp: null, hasGps: null, hidden: true };
 
 window.addEventListener('error', e => {
   console.error('[JS error]', e.message, (e.filename || '') + ':' + (e.lineno || ''));
@@ -55,7 +61,16 @@ function connect() {
   try {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.onopen = () => { const c = $('#conn'); if (c) c.className = 'conn on'; };
-    ws.onmessage = ev => { try { S = JSON.parse(ev.data); render(); } catch (e) { console.error(e); } };
+    ws.onmessage = ev => {
+      try {
+        S = JSON.parse(ev.data);
+        try {
+          localStorage.setItem('snapshot', ev.data);
+          localStorage.setItem('snapshot_ts', new Date().toLocaleTimeString());
+        } catch (e) {}
+        render();
+      } catch (e) { console.error(e); }
+    };
     ws.onclose = () => {
       const c = $('#conn'); if (c) c.className = 'conn off';
       setTimeout(connect, 1500);
@@ -115,8 +130,6 @@ function buildMap() {
   if (!svg) return;
   svg.innerHTML = '';
   const N = Object.fromEntries(AIR.nodes.map(n => [n.id, n]));
-  // стартовый вид — на перрон, а не на весь аэродром: на реальной карте
-  // весь SVO/DME занимает 5–8 км и стоянки в общем виде теряются
   const standPts = (AIR.stands || []).map(s => N[s.node]).filter(Boolean);
   if (standPts.length) {
     const xs = standPts.map(p => p.x), ys = standPts.map(p => p.y);
@@ -168,9 +181,9 @@ function buildMap() {
   });
   AIR.stands.forEach(s => {
     const n = N[s.node], g = el('g', {class: 'stand', 'data-stand': s.id, transform: `translate(${n.x},${n.y})`}, gS);
-    el('circle', {class: 'ring', r: 72}, g);
-    el('path', {class: 'plane', d: PLANE, transform: `rotate(${s.heading ?? 0}) scale(1.1)`}, g);
-    el('text', {y: 128}, g).textContent = s.id;
+    el('circle', {class: 'ring', r: 38}, g);
+    el('path', {class: 'plane', d: PLANE, transform: `rotate(${s.heading ?? 0}) scale(0.5)`}, g);
+    el('text', {y: 52, 'font-size': '22', 'text-anchor': 'middle', 'font-weight': 'bold', fill: '#4A4335'}, g).textContent = s.id;
     el('title', {}, g).textContent = 'Стоянка ' + s.id;
     mapEl.stands[s.id] = g;
   });
@@ -184,23 +197,28 @@ function techEl(t, parent) {
   const g = el('g', {class: 'tech', 'data-tech': t.id}, parent || $('#techs'));
   el('circle', {r: 30, fill: QCOL[t.qual]}, g);
   el('text', {}, g).textContent = t.id;
+  el('text', {class: 'tech-gps', y: 60}, g).textContent = '';
   el('title', {}, g).textContent = `${t.name}, ${t.qual}, ${t.speed} м/с`;
   mapEl.techs[t.id] = g;
   return g;
 }
 function aircraftEl(a, parent) {
   const g = el('g', {class: 'aircraft ' + a.status, 'data-aircraft': a.id}, parent || $('#aircraft'));
-  el('path', {class: 'ac-plane', d: PLANE, transform: 'scale(0.9)'}, g);
-  el('text', {class: 'ac-label', y: -78}, g).textContent = a.flight;
+  const wrap = el('g', {class: 'ac-plane-wrap'}, g);
+  el('path', {class: 'ac-plane', d: PLANE, transform: 'scale(0.35)'}, wrap);
+  el('text', {class: 'ac-label', y: -30}, g).textContent = a.flight;
+  el('text', {class: 'ac-gps', y: 50}, g).textContent = '';
   el('title', {}, g).textContent = `${a.flight} ${a.model} — ${a.status_ru}${a.stand ? ' (' + a.stand + ')' : ''}`;
   mapEl.aircraft[a.id] = g;
   return g;
 }
 function gseEl(g, parent) {
   const grp = el('g', {class: 'gse ' + g.status, 'data-gse': g.id}, parent || $('#gse'));
+  const wrap = el('g', {class: 'gse-wrap'}, grp);
   el('rect', {class: 'gse-body', x: -18, y: -12, width: 36, height: 24, rx: 4,
-              fill: g.color}, grp);
-  el('text', {class: 'gse-label', y: 3}, grp).textContent = g.short;
+              fill: g.color}, wrap);
+  el('text', {class: 'gse-label', y: 3}, wrap).textContent = g.short;
+  el('text', {class: 'gse-gps', y: 30}, grp).textContent = '';
   el('title', {}, grp).textContent = `${g.label} — ${g.status_ru}`;
   mapEl.gse[g.id] = grp;
   return grp;
@@ -258,6 +276,7 @@ function initMapEvents() {
       const id = +acEl.dataset.aircraft;
       selAircraft = selAircraft === id ? null : id;
       selReq = null;
+      _detailCache = {id: null, status: null, sp: null, hasGps: null, hidden: true};
       render();
       return;
     }
@@ -281,7 +300,20 @@ function renderMap() {
   (S.aircraft || []).forEach(a => {
     seenAc.add(a.id);
     const g = mapEl.aircraft[a.id] || aircraftEl(a);
-    g.style.transform = `translate(${a.x}px, ${a.y}px) rotate(${a.heading}deg)`;
+    g.style.transform = `translate(${a.x}px, ${a.y}px)`;
+    const wrap = g.querySelector('.ac-plane-wrap');
+    if (wrap) wrap.style.transform = `rotate(${a.heading}deg)`;
+
+    const gpsEl = g.querySelector('.ac-gps');
+    if (gpsEl) {
+      if (showGps && a.gps) {
+        gpsEl.textContent = `${a.gps.lat.toFixed(5)}, ${a.gps.lon.toFixed(5)}`;
+        gpsEl.style.display = '';
+      } else {
+        gpsEl.style.display = 'none';
+      }
+    }
+
     let cls = 'aircraft ' + a.status;
     if (selAircraft === a.id) cls += ' sel';
     g.setAttribute('class', cls);
@@ -300,10 +332,22 @@ function renderMap() {
     const el2 = mapEl.gse[g.id] || gseEl(g);
     const lane = (S.gse_types?.[g.gtype]?.lane) ?? g.lane ?? 0;
     let [px, py] = laneOffsetPoint(g.x, g.y, g.heading, lane);
-    // Дополнительный отскок от самолётов, если близко
     const [ox, oy] = avoidPlanes(g.x, g.y, planes, 110, 30);
     px += ox; py += oy;
-    el2.style.transform = `translate(${px}px, ${py}px) rotate(${g.heading}deg)`;
+    el2.style.transform = `translate(${px}px, ${py}px)`;
+    const wrap = el2.querySelector('.gse-wrap');
+    if (wrap) wrap.style.transform = `rotate(${g.heading}deg)`;
+
+    const gpsEl = el2.querySelector('.gse-gps');
+    if (gpsEl) {
+      if (showGps && g.gps) {
+        gpsEl.textContent = `${g.gps.lat.toFixed(5)}, ${g.gps.lon.toFixed(5)}`;
+        gpsEl.style.display = '';
+      } else {
+        gpsEl.style.display = 'none';
+      }
+    }
+
     el2.setAttribute('class', 'gse ' + g.status);
     const t = el2.querySelector('title');
     if (t) t.textContent = `${g.label} — ${g.status_ru}${g.target ? ' (борт ' + g.target + ')' : ''}`;
@@ -315,6 +359,17 @@ function renderMap() {
   (S.techs || []).forEach(t => {
     const g = mapEl.techs[t.id] || techEl(t);
     g.style.transform = `translate(${t.x}px, ${t.y}px)`;
+
+    const gpsEl = g.querySelector('.tech-gps');
+    if (gpsEl) {
+      if (showGps && t.gps) {
+        gpsEl.textContent = `${t.gps.lat.toFixed(5)}, ${t.gps.lon.toFixed(5)}`;
+        gpsEl.style.display = '';
+      } else {
+        gpsEl.style.display = 'none';
+      }
+    }
+
     g.setAttribute('class', 'tech ' + t.status + (selTech === t.id ? ' sel' : ''));
   });
 
@@ -553,6 +608,7 @@ function render() {
   });
 }
 function renderLive() {
+  // Заявки: ETA / время / прогресс-бар
   S.active.forEach(r => {
     const q = k => $(`[data-live="${k}"][data-id="${r.id}"]`);
     if (q('left')) q('left').textContent = fmt(r.eta_left);
@@ -563,23 +619,74 @@ function renderLive() {
       b.className = r.elapsed > NORM ? 'over' : r.elapsed > NORM * 0.7 ? 'warn' : '';
     }
   });
+
+  // Карточка самолёта: GPS, курс, ETA, время до вылета — обновляем в реальном времени
+  if (selAircraft != null) {
+    const a = (S.aircraft || []).find(x => x.id === selAircraft);
+    if (a) {
+      document.querySelectorAll(`[data-live-gps="${a.id}"]`).forEach(node => {
+        node.textContent = a.gps
+          ? `${a.gps.lat.toFixed(6)}, ${a.gps.lon.toFixed(6)}`
+          : 'Ожидание данных от сервера…';
+      });
+      document.querySelectorAll(`[data-live-heading="${a.id}"]`).forEach(node => {
+        node.textContent = `${(a.heading ?? 0).toFixed(1)}°`;
+      });
+      document.querySelectorAll(`[data-live-eta-left="${a.id}"]`).forEach(node => {
+        if (a.eta_left != null) node.textContent = fmt(a.eta_left);
+      });
+      document.querySelectorAll(`[data-live-parked-left="${a.id}"]`).forEach(node => {
+        if (a.parked_left != null) node.textContent = fmt(a.parked_left);
+      });
+    }
+  }
 }
 
 /* ---------- Правая панель ---------- */
 function renderDetail() {
   const p = $('#detailPanel');
   if (!p) return;
-  if (selAircraft == null) { p.hidden = true; p.classList.remove('open'); return; }
+
+  if (selAircraft == null) {
+    p.hidden = true;
+    p.classList.remove('open');
+    _detailCache = {id: null, status: null, sp: null, hasGps: null, hidden: true};
+    return;
+  }
   const a = (S.aircraft || []).find(x => x.id === selAircraft);
-  if (!a) { selAircraft = null; p.hidden = true; p.classList.remove('open'); return; }
+  if (!a) {
+    selAircraft = null;
+    p.hidden = true;
+    p.classList.remove('open');
+    _detailCache = {id: null, status: null, sp: null, hasGps: null, hidden: true};
+    return;
+  }
+
+  // Кеш: если тот же самолёт, тот же статус, тот же прогресс и то же наличие gps —
+  // не пересобираем HTML (иначе сбрасывается скролл и мигает содержимое).
+  // GPS, курс, ETA обновляются через renderLive() каждые 0.4 сек.
+  const hasGpsNow = !!a.gps;
+  if (_detailCache.id === a.id &&
+      _detailCache.status === a.status &&
+      _detailCache.sp === a.services_progress &&
+      _detailCache.hasGps === hasGpsNow) {
+    if (p.hidden || !p.classList.contains('open')) {
+      p.hidden = false;
+      requestAnimationFrame(() => p.classList.add('open'));
+      _detailCache.hidden = false;
+    }
+    return;
+  }
+
+  _detailCache = {id: a.id, status: a.status, sp: a.services_progress, hasGps: hasGpsNow, hidden: false};
 
   const reqs = [...S.active, ...S.history].filter(r => r.aircraft_id === a.id);
   const b = a.brief || {};
 
   const etaBlock = a.status === 'inbound' && a.eta_left != null
-    ? `<div><dt>Прибытие через</dt><dd>${fmt(a.eta_left)}</dd></div>` : '';
+    ? `<div><dt>Прибытие через</dt><dd data-live-eta-left="${a.id}">${fmt(a.eta_left)}</dd></div>` : '';
   const parkedBlock = a.status === 'parked' && a.parked_left != null
-    ? `<div><dt>Вылет через</dt><dd>${fmt(a.parked_left)}</dd></div>` : '';
+    ? `<div><dt>Вылет через</dt><dd data-live-parked-left="${a.id}">${fmt(a.parked_left)}</dd></div>` : '';
 
   const servicesHtml = (a.services || []).length
     ? `<ul class="svc-list">
@@ -608,6 +715,24 @@ function renderDetail() {
          ${a.brief.source === 'llm' ? '🤖 LLM' : 'шаблон'}
        </span>`
     : `<span class="src-tag">…</span>`;
+
+  // GPS-блок рендерится ВСЕГДА. Если данных ещё нет — покажет заглушку,
+  // а renderLive() подставит реальные координаты, как только они появятся.
+  const gpsCard = `
+    <section class="dp-gps-card">
+      <div class="dp-gps-head">
+        <span class="dp-gps-dot"></span>
+        <span>GPS · координаты в реальном времени</span>
+      </div>
+      <div class="dp-gps-value" data-live-gps="${a.id}">${
+        a.gps ? `${a.gps.lat.toFixed(6)}, ${a.gps.lon.toFixed(6)}` : 'Ожидание данных от сервера…'
+      }</div>
+      <div class="dp-gps-meta">
+        <span>Курс: <b data-live-heading="${a.id}">${(a.heading ?? 0).toFixed(1)}°</b></span>
+        <span>Стоянка: <b>${esc(a.stand || '—')}</b></span>
+        <span>${esc(a.status_ru)}</span>
+      </div>
+    </section>`;
 
   const briefHtml = `
     <section class="dp-brief">
@@ -663,6 +788,8 @@ function renderDetail() {
       </div>
       <button class="dp-close" data-ac-close aria-label="Закрыть">×</button>
     </header>
+
+    ${gpsCard}
 
     <div class="dp-status st-${a.status}">
       <span class="dot" style="background:${AC_COL[a.status]}"></span>
@@ -737,6 +864,18 @@ function initUI() {
       render();
     };
   }
+
+  const chk = $('#chkGps');
+  if (chk) {
+    chk.checked = showGps;
+    chk.onchange = e => {
+      showGps = e.target.checked;
+      try { localStorage.setItem('showGps', showGps); } catch (err) {}
+      if (typeof Map3D !== 'undefined' && Map3D.setShowGps) Map3D.setShowGps(showGps);
+      render();
+    };
+  }
+
   const sp = $('#speed'); if (sp) sp.onchange = e => api('/api/sim', {speed: +e.target.value}).catch(() => {});
   const nb = $('#newBtn'); if (nb) nb.onclick = () => openDialog();
   const na = $('#newAcBtn'); if (na) na.onclick = () => api('/api/aircraft/spawn').catch(() => {});
@@ -772,7 +911,16 @@ function initUI() {
       return;
     }
     const acRow = e.target.closest('[data-ac-row]');
-    if (acRow) { selAircraft = +acRow.dataset.acRow; selReq = null; render(); return; }
+    if (acRow) {
+      const newId = +acRow.dataset.acRow;
+      if (selAircraft !== newId) {
+        _detailCache = {id: null, status: null, sp: null, hasGps: null, hidden: true};
+      }
+      selAircraft = newId;
+      selReq = null;
+      render();
+      return;
+    }
     const card = e.target.closest('.req');
     if (card && !e.target.closest('details')) {
       selReq = +card.dataset.id;
@@ -797,7 +945,6 @@ function initUI() {
     AIR = await (await fetch('/api/airport')).json();
     S = await (await fetch('/api/state')).json();
 
-    // WebSocket — до render, чтобы обновления шли даже при ошибках UI
     connect();
 
     initUI();
@@ -805,8 +952,16 @@ function initUI() {
     buildMap();
     Map3D.init(AIR, {
       onStand: id => openDialog(id),
-      onAircraft: id => { selAircraft = id; selReq = null; render(); },
+      onAircraft: id => {
+        if (selAircraft !== id) {
+          _detailCache = {id: null, status: null, sp: null, hasGps: null, hidden: true};
+        }
+        selAircraft = id;
+        selReq = null;
+        render();
+      },
     });
+    if (typeof Map3D.setShowGps === 'function') Map3D.setShowGps(showGps);
     if (new URLSearchParams(location.search).get('view') === '3d' || location.hash === '#3d') {
       Map3D.setActive(true);
     }
